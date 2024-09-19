@@ -261,7 +261,9 @@ SDL_bool VNC_NoAuthSupported(Uint8 *options, size_t n) {
 }
 
 int VNC_NegotiateSecurity33(VNC_Connection *vnc) {
-    return VNC_ERROR_UNIMPLEMENTED;
+    Uint32 security_protocol_count;
+    VNC_FromServer(vnc->socket, &security_protocol_count, 4);
+    return 0;
 }
 
 int VNC_NegotiateSecurity37(VNC_Connection *vnc) {
@@ -318,6 +320,37 @@ int VNC_ClientInitialisation(VNC_Connection *vnc) {
     Uint8 shared_flag = 0;
     VNC_ToServer(vnc->socket, &shared_flag, 1);
     return 0;
+}
+
+int VNC_SetPixelFormat(VNC_Connection *vnc, VNC_PixelFormat *pixelFmt) {
+    /*
+     * Message size is:
+     * - 1 bytes for message type;
+     * - 3 byte padding;
+     * - 13 bytes for pixel format;
+     * - 3 bytes padding.
+     */
+    size_t msg_size = 1 + 3 + 13 + 3;
+
+    VNC_AssureBufferSize(vnc->buffer, msg_size);
+
+    Uint8 *msg = (Uint8 *) vnc->buffer.data;
+    *msg++ = 0; // ID of SetPixelFormat message
+    msg += 3;
+
+    VNC_PixelFormat *fmt = (VNC_PixelFormat *) msg;
+    fmt->bpp = pixelFmt->bpp;
+    fmt->depth = pixelFmt->depth;
+    fmt->is_big_endian = pixelFmt->is_big_endian;
+    fmt->is_true_color = pixelFmt->is_true_color;
+    fmt->red_max = SDL_SwapBE16(pixelFmt->red_max);
+    fmt->green_max = SDL_SwapBE16(pixelFmt->green_max);
+    fmt->blue_max = SDL_SwapBE16(pixelFmt->blue_max);
+    fmt->red_shift = pixelFmt->red_shift;
+    fmt->green_shift = pixelFmt->green_shift;
+    fmt->blue_shift = pixelFmt->blue_shift;
+
+    return VNC_ToServer(vnc->socket, vnc->buffer.data, msg_size);
 }
 
 int VNC_ServerInitialisation(VNC_Connection *vnc) {
@@ -513,10 +546,10 @@ int VNC_FramebufferUpdateRequest(int socket, SDL_bool incremental, Uint16 x,
     *msg_as_8b++ = incremental;
 
     Uint16 *msg_as_16b = (Uint16 *) msg_as_8b;
-    *msg_as_16b++ = x;
-    *msg_as_16b++ = y;
-    *msg_as_16b++ = w;
-    *msg_as_16b++ = h;
+    *msg_as_16b++ = SDL_SwapBE16(x);
+    *msg_as_16b++ = SDL_SwapBE16(y);
+    *msg_as_16b++ = SDL_SwapBE16(w);
+    *msg_as_16b++ = SDL_SwapBE16(h);
 
     return VNC_ToServer(socket, msg, 10);
 }
@@ -679,6 +712,7 @@ VNC_Result VNC_InitConnection(VNC_Connection *vnc, char *host, Uint16 port,
     VNC_SetEncodings(vnc, encodings,
             (sizeof (encodings) / sizeof (VNC_RectangleEncodingMethod)));
 
+    VNC_SetPixelFormat(vnc, &vnc->server_details.fmt);
     VNC_SendInitialFramebufferUpdateRequest(vnc);
 
     vnc->surface = VNC_CreateSurfaceForServer(&vnc->server_details);
@@ -1006,7 +1040,7 @@ SDL_Window *VNC_CreateWindowForConnection(VNC_Connection *vnc, char *title,
     vnc->window = SDL_CreateWindow(title, x, y, vnc->server_details.w,
             vnc->server_details.h, flags);
 
-    SDL_ShowCursor(SDL_DISABLE);
+    SDL_ShowCursor(SDL_ENABLE);
 
     return vnc->window;
 }

@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     int connection_result = VNC_InitConnection(&vnc, host, port, 60);
     exit_on_vnc_error(connection_result);
 
-    SDL_Window *wind = VNC_CreateWindowForConnection(&vnc, NULL,
+    SDL_Window *wind = VNC_CreateWindowForConnection(&vnc, vnc.server_details.name,
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 0);
     exit_on_sdl_error(!wind);
 
