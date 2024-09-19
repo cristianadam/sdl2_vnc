@@ -8,6 +8,7 @@
 #define _SDL2_VNC_H
 
 #include <SDL2/SDL.h>
+#include <SDL_net.h>
 
 /**
  * Structure used for the VNC connection's data buffer.
@@ -166,7 +167,7 @@ typedef struct {
     /**
      * The socket associated with the connection.
      */
-    int socket;
+    TCPsocket socket;
 
     /**
      * Data buffer for receiving and processing incoming messages.

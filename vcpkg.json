@@ -2,6 +2,6 @@
   "name": "sdl2vnc",
   "version-string": "1.0.0",
   "dependencies": [
-    "sdl2"
+    "sdl2", "sdl2-net"
   ]
 }

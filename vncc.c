@@ -52,6 +52,7 @@ int main(int argc, char **argv) {
     int port = parse_address(host);
 
     SDL_Init(SDL_INIT_VIDEO);
+    SDLNet_Init();
     VNC_Init();
 
     VNC_Connection vnc;

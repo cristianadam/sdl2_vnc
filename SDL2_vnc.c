@@ -1,9 +1,7 @@
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
 #include <sys/types.h>
 
 #include <SDL2/SDL.h>
+#include <SDL_net.h>
 
 #include "keysymdef.h"
 
@@ -94,23 +92,13 @@ int VNC_InitBuffer(VNC_ConnectionBuffer *buffer) {
     return buffer->data == NULL;
 }
 
-int VNC_CreateSocket(void) {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-
-    struct timeval t;
-    t.tv_sec = 0;
-    t.tv_usec = 0;
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t));
-
-    return sock;
-}
-
-int VNC_Connect(VNC_Connection *vnc, char *host, uint port) {
-    struct sockaddr_in address;
-    address.sin_family = AF_INET;
-    address.sin_port = htons(port);
-    inet_pton(AF_INET, host, &address.sin_addr);
-    return connect(vnc->socket, (struct sockaddr *) &address, sizeof(address));
+TCPsocket VNC_Connect(VNC_Connection *vnc, char *host, uint port) {
+    IPaddress ip;
+    if (SDLNet_ResolveHost(&ip, host, port) == -1) {
+        fprintf(stderr, "SDLNet_ResolveHost: %s\n", SDLNet_GetError());
+        return NULL;
+    }
+    return SDLNet_TCP_Open(&ip);
 }
 
 int VNC_ResizeBuffer(VNC_ConnectionBuffer buffer, size_t n) {
@@ -127,13 +115,13 @@ int VNC_AssureBufferSize(VNC_ConnectionBuffer buffer, size_t n) {
     return 0;
 }
 
-int VNC_FromServer(int socket, void *buffer, size_t n) {
+int VNC_FromServer(TCPsocket socket, void *buffer, size_t n) {
 
-    size_t left_to_read = n;
+    int left_to_read = n;
     char *needle = buffer;
 
     while (left_to_read > 0) {
-        ssize_t bytes_read = recv(socket, needle, left_to_read, 0);
+        int bytes_read = SDLNet_TCP_Recv(socket, needle, left_to_read);
 
         if (bytes_read < 0) {
             return -1;
@@ -195,8 +183,8 @@ int VNC_ServerToScratchBuffer(VNC_Connection *vnc, size_t w, size_t h) {
     return 0;
 }
 
-int VNC_ToServer(int socket, void *data, size_t n) {
-    return send(socket, data, n, 0);
+int VNC_ToServer(TCPsocket socket, void *data, size_t n) {
+    return SDLNet_TCP_Send(socket, data, n);
 }
 
 VNC_RFBProtocolVersion VNC_DeduceRFBProtocolVersion(char *str) {
@@ -534,7 +522,7 @@ int VNC_FrameBufferUpdate(VNC_Connection *vnc) {
     return 0;
 }
 
-int VNC_FramebufferUpdateRequest(int socket, SDL_bool incremental, Uint16 x,
+int VNC_FramebufferUpdateRequest(TCPsocket socket, SDL_bool incremental, Uint16 x,
         Uint16 y, Uint16 w, Uint16 h) {
 
     debug("sending framebuffer update request\n");
@@ -690,15 +678,9 @@ VNC_Result VNC_InitConnection(VNC_Connection *vnc, char *host, Uint16 port,
         return VNC_ERROR_OOM;
     }
 
-    vnc->socket = VNC_CreateSocket();
-    if (vnc->socket <= 0) {
-        return VNC_ERROR_COULD_NOT_CREATE_SOCKET;
-    }
-
-    res = VNC_Connect(vnc, host, port);
-    if (res) {
+    vnc->socket = VNC_Connect(vnc, host, port);
+    if (vnc->socket == NULL)
         return VNC_ERROR_COULD_NOT_CONNECT;
-    }
 
     VNC_Handshake(vnc);
 
